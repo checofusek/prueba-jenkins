@@ -1,0 +1,47 @@
+- hosts: resto
+  remote_user: ar030917
+  strategy: linear
+  become: yes
+  tasks:
+  - name: "Agregando el servidor como cliente del DataDomain"
+    raw: "nfs add /data/col1/mksysb {{ inventory_hostname }} (rw,no_root_squash,no_all_squash,insecure,sec=sys)"
+    become: no
+    delegate_to: dd4200.aerolineas.com.ar
+  - name: "Validando el punto de montaje /tmp/mksysb para montar el DataDomain"
+    file:
+       path: "/tmp/mksysb/"
+       state: directory
+  - name: "Creando entrada en el /etc/filesystem y montando DataDomain"
+    aix_filesystem:
+       device: /data/col1/mksysb
+       nfs_server: dd4200.aerolineas.com.ar
+       filesystem: /tmp/mksysb 
+       state: present
+  - name: "Validando el path donde se dejara el mksysb dentro del NFS o lo creo"
+    file:
+       path: "/tmp/mksysb/mksysb/{{ inventory_hostname_short }}"
+       state: directory
+  - name: "Registrando hora del servidor "
+    shell: "date +%d%m%y"
+    register: fecha
+  - name: Creando mksysb del servidor
+    mksysb: 
+       name: "{{ inventory_hostname_short }}-{{ fecha.stdout }}"
+       storage_path: "/tmp/mksysb/mksysb/{{ inventory_hostname_short }}"
+       exclude_files: yes
+       exclude_wpar_files: yes
+  - name: "Desmonta NFS del DataDomain"
+    aix_filesystem:
+       device: "/data/col1/mksysb"
+       nfs_server: dd4200.aerolineas.com.ar
+       filesystem: /tmp/mksysb
+       state: unmounted
+  - name: "Removiendo punto de montaje y NFS en el servidor"
+    aix_filesystem:
+       filesystem: /tmp/mksysb
+       rm_mount_point: yes
+       state: absent
+  - name: "Eliminando del DataDomain al servidor"
+    raw: "nfs del /data/col1/mksysb {{ inventory_hostname }}"
+    become: no
+    delegate_to: dd4200.aerolineas.com.ar
